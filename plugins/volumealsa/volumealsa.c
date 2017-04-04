@@ -152,13 +152,24 @@ static void set_bt_alsa_device (VolumeALSAPlugin *vol, char *devname)
     g_free (user_config_file);
 }
 
-static void get_bt_device_id (char *id, int size)
+static int get_bt_device_id (char *id, int size)
 {
     // TIDY ME UP - I'M A HACK!!!!
-    FILE *fp = popen ("grep -o 'device \\\"[^\\\"]*\\\"' ~/.asoundrc | cut -d '\"' -f 2 | tr : _", "r");
+    FILE *fp;
+    int len;
+
+    id[0] = 0;
+
+    fp = popen ("grep -o 'device \\\"[^\\\"]*\\\"' ~/.asoundrc | cut -d '\"' -f 2 | tr : _", "r");
     fgets (id, size - 1, fp);
     pclose (fp);
-    if (strlen (id)) id[strlen(id) - 1] = 0;
+
+    if (len = strlen (id))
+    {
+        id[len - 1] = 0;
+        return 1;
+    }
+    else return 0;
 }
 
 static void cb_name_owned (GDBusConnection *connection, const gchar *name, const gchar *owner, gpointer user_data)
@@ -179,9 +190,7 @@ static void cb_name_owned (GDBusConnection *connection, const gchar *name, const
     }
 
     /* Check whether a Bluetooth audio device is the current default - connect to it if it is */
-    buffer[0] = 0;
-    get_bt_device_id (buffer, 64);
-    if (strlen (buffer))
+    if (get_bt_device_id (buffer, 64))
     {
         /* Reconnect the current Bluetooth audio device */
         if (vol->bt_conname) g_free (vol->bt_conname);
@@ -281,9 +290,7 @@ static void disconnect_device (VolumeALSAPlugin *vol)
     GVariant *var;
     char buffer[64], device[64];
 
-    device[0] = 0;
-    get_bt_device_id (device, 64);
-    if (strlen (device))
+    if (get_bt_device_id (device, 64))
     {
         sprintf (buffer, "/org/bluez/hci0/dev_%s", device);
         DEBUG ("Device to disconnect = %s", buffer);
@@ -1356,7 +1363,6 @@ static gboolean volumealsa_button_press_event(GtkWidget * widget, GdkEventButton
         if (vol->objmanager)
         {
             char btdevice[256];
-            btdevice[0] = 0;
             get_bt_device_id (btdevice, 256);
             // iterate all the objects the manager knows about
             GList *objects = g_dbus_object_manager_get_objects (vol->objmanager);
