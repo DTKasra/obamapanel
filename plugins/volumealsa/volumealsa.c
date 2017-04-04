@@ -158,7 +158,7 @@ static void get_bt_device_id (char *id, int size)
     FILE *fp = popen ("grep -o 'device \\\"[^\\\"]*\\\"' ~/.asoundrc | cut -d '\"' -f 2 | tr : _", "r");
     fgets (id, size - 1, fp);
     pclose (fp);
-    id[strlen(id) - 1] = 0;
+    if (strlen (id)) id[strlen(id) - 1] = 0;
 }
 
 static int get_status (char *cmd)
@@ -318,8 +318,11 @@ static void disconnect_device (VolumeALSAPlugin *vol)
     }
 
     // if no connection found, just make the new connection
-    DEBUG ("Nothing to disconnect - connecting to %s...", vol->bt_conname);
-    connect_device (vol);
+    if (vol->bt_conname)
+    {
+        DEBUG ("Nothing to disconnect - connecting to %s...", vol->bt_conname);
+        connect_device (vol);
+    }
 }
 
 static void cb_disconnected (GObject *source, GAsyncResult *res, gpointer user_data)
@@ -337,8 +340,11 @@ static void cb_disconnected (GObject *source, GAsyncResult *res, gpointer user_d
     else DEBUG ("Disconnected OK");
 
     // call BlueZ over DBus to connect to the device
-    DEBUG ("Connecting to %s...", vol->bt_conname);
-    connect_device (vol);
+    if (vol->bt_conname)
+    {
+        DEBUG ("Connecting to %s...", vol->bt_conname);
+        connect_device (vol);
+    }
 }
 
 static void set_bt_card_event (GtkWidget * widget, VolumeALSAPlugin * vol)
@@ -1198,6 +1204,9 @@ static void send_message (void)
 
 static void set_default_card_event (GtkWidget * widget, VolumeALSAPlugin * vol)
 {
+    /* if there is a Bluetooth device in use, disconnect it first */
+    disconnect_device (vol);
+
     asound_set_default_card (widget->name);
     asound_restart (vol);
     volumealsa_update_display (vol);
@@ -1208,6 +1217,9 @@ static void set_default_card_event (GtkWidget * widget, VolumeALSAPlugin * vol)
 static void set_bcm_output (GtkWidget * widget, VolumeALSAPlugin *vol)
 {
     char cmdbuf[64], bcmdev[64];
+
+    /* if there is a Bluetooth device in use, disconnect it first */
+    disconnect_device (vol);
 
     /* check that the BCM device is default... */
     asound_get_default_card (cmdbuf);
