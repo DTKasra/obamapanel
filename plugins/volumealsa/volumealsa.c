@@ -125,7 +125,7 @@ static void cb_disconnected (GObject *source, GAsyncResult *res, gpointer user_d
 static void set_bt_card_event (GtkWidget * widget, VolumeALSAPlugin * vol);
 static void show_connect_dialog (VolumeALSAPlugin *vol, gboolean failed, const gchar *param);
 static void handle_close_connect_dialog (GtkButton *button, gpointer user_data);
-static gint delete_conn (GtkWidget *widget, GdkEvent *event, gpointer user_data);
+static gint handle_delete_connect_dialog (GtkWidget *widget, GdkEvent *event, gpointer user_data);
 static DEVICE_TYPE check_uuids (VolumeALSAPlugin *vol, const gchar *path);
 
 static long lrint_dir(double x, int dir);
@@ -159,22 +159,6 @@ static void get_bt_device_id (char *id, int size)
     fgets (id, size - 1, fp);
     pclose (fp);
     if (strlen (id)) id[strlen(id) - 1] = 0;
-}
-
-static int get_status (char *cmd)
-{
-    FILE *fp = popen (cmd, "r");
-    char buf[64];
-    int res;
-
-    if (fp && fgets (buf, sizeof (buf) - 1, fp) != NULL)
-    {
-        pclose (fp);
-        sscanf (buf, "%d", &res);
-        return res;
-    }
-    if (fp) pclose (fp);
-    return 0;
 }
 
 static void cb_name_owned (GDBusConnection *connection, const gchar *name, const gchar *owner, gpointer user_data)
@@ -352,25 +336,11 @@ static void set_bt_card_event (GtkWidget * widget, VolumeALSAPlugin * vol)
     // show the connection dialog
     show_connect_dialog (vol, FALSE, gtk_menu_item_get_label (GTK_MENU_ITEM (widget)));
 
-    // store the name of the BlueZ device to connect to for use in the callback
+    // store the name of the BlueZ device to connect to once the disconnect has happened
     if (vol->bt_conname) g_free (vol->bt_conname);
     vol->bt_conname = g_strndup (widget->name, 64);
 
-    char buffer[64];
-    buffer[0] = 0;
-    get_bt_device_id (buffer, 64);
-    if (strlen (buffer))
-    {
-        // already connected to a Bluetooth device - disconnect it
-        DEBUG ("Disconnecting existing Bluetooth audio device");
-        disconnect_device (vol);
-    }
-    else
-    {
-        // call BlueZ over DBus to connect to the device
-        DEBUG ("Connecting to %s...", vol->bt_conname);
-        connect_device (vol);
-    }
+    disconnect_device (vol);
 }
 
 static void show_connect_dialog (VolumeALSAPlugin *vol, gboolean failed, const gchar *param)
@@ -390,7 +360,7 @@ static void show_connect_dialog (VolumeALSAPlugin *vol, gboolean failed, const g
         gtk_label_set_justify (GTK_LABEL (vol->conn_label), GTK_JUSTIFY_LEFT);
         gtk_misc_set_alignment (GTK_MISC (vol->conn_label), 0.0, 0.0);
         gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (vol->conn_dialog))), vol->conn_label, TRUE, TRUE, 0);
-        g_signal_connect (GTK_OBJECT (vol->conn_dialog), "delete_event", G_CALLBACK (delete_conn), vol);
+        g_signal_connect (GTK_OBJECT (vol->conn_dialog), "delete_event", G_CALLBACK (handle_delete_connect_dialog), vol);
         gtk_widget_show_all (vol->conn_dialog);
     }
     else
@@ -413,7 +383,7 @@ static void handle_close_connect_dialog (GtkButton *button, gpointer user_data)
     }
 }
 
-static gint delete_conn (GtkWidget *widget, GdkEvent *event, gpointer user_data)
+static gint handle_delete_connect_dialog (GtkWidget *widget, GdkEvent *event, gpointer user_data)
 {
     VolumeALSAPlugin *vol = (VolumeALSAPlugin *) user_data;
     if (vol->conn_dialog)
